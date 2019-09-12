@@ -9,7 +9,7 @@ First run this script to convert video frames into images
 ``` bash
 python video2img.py --video input.avi
 ```
-Then start labeling with this following script
+Then start labeling with this following script (you can directly start with this command as well, it will detect if images file exists.)
 ``` bash
 python video_gt_labeler.py --video input.avi --id 0
 ```
