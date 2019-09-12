@@ -5,6 +5,7 @@ import os
 
 parser = argparse.ArgumentParser(description='Video to image converter')
 parser.add_argument('--video', help='path of video that to be converted')
+parser.add_argument('--flip', default=1, help='path of video that to be converted')
 args = parser.parse_args()
 
 video_path = args.video
@@ -29,6 +30,8 @@ while True:
         break
     if image_w > 1080:
         frame = cv2.resize(frame, (half_image_w, half_image_h))
+    if args.flip == 1:
+    	frame = cv2.rotate(frame, rotateCode=cv2.ROTATE_90_CLOCKWISE)
     name = '%s/%06d.jpg' % (img_root, n_frame)
     cv2.imwrite(name, frame)
     n_frame += 1

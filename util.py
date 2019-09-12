@@ -1,6 +1,47 @@
 import numpy as np
 import cv2
+import random
+import string
 
+def randomString(stringLength=32):
+    """Generate a random string of fixed length """
+    letters = string.ascii_lowercase + string.digits
+    return ''.join(random.choice(letters) for i in range(stringLength))
+
+empty_record = {
+    "asset": {
+        "format": 'jpg',
+        "id": None,
+        "name": None,
+        "path": None,
+        "size": {
+            'height': None,
+            'width': None
+        },
+        "state": 2,
+        "type": 1
+    },
+    "regions": [],
+    "version": '2.1.0'
+}
+
+empty_box = {
+    "id": None,
+    "type": 'POLYGON',
+    "tags": ["Mykad"],
+    "boundingBox": {
+        "left": None,
+        "top": None,
+        "width": None,
+        "height": None
+    },
+    "points": []
+}
+
+empty_point = {
+    "x": None,
+    "y": None
+}
 
 def cxy_wh_2_rect1(pos, sz):
     return np.array([pos[0]-sz[0]/2+1, pos[1]-sz[1]/2+1, sz[0], sz[1]])  # 1-index

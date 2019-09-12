@@ -10,7 +10,10 @@ import torch
 import cv2
 import time as time
 from util import crop_chw, gaussian_shaped_labels, cxy_wh_2_rect1, rect1_2_cxy_wh, cxy_wh_2_bbox, bbox_2_cxy_wh
+from util import empty_record, empty_box, empty_point
+from util import randomString
 from net import DCFNet
+from copy import deepcopy
 
 parser = argparse.ArgumentParser(description='Groundtruth labeler for video with DCFNet')
 parser.add_argument('--video', help='path of video that to be labeled')
@@ -18,6 +21,7 @@ parser.add_argument('--id', default="0", help='the ID of target')
 parser.add_argument('--replay_only', default="0", help="replay results only")
 parser.add_argument('--model', metavar='PATH', default='param.pth')
 parser.add_argument('--n', default=1, type=int, help='start labeling from n frame')
+parser.add_argument('--flip', default=1, type=int, help='if 1 then flip the input video')
 args = parser.parse_args()
 
 class TrackerConfig(object):
@@ -56,14 +60,20 @@ res = []
 video = cv2.VideoCapture(video_path)
 if not os.path.isdir(image_path):
     print("Image files not found, run converting scripts automatically...")
-    os.system("python video2img.py --video %s" % video_path)
+    os.system("python video2img.py --video %s --flip %s" % (video_path, args.flip))
 n_total_frames = len(os.listdir(image_path))
 cv2_frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
 if n_total_frames != cv2_frame_count:
     print("Warning: number of images (%d) and frame count of cv2 (%d) are different" % (n_total_frames, cv2_frame_count))
 print("There are total %d frames in this video" % n_total_frames)
-image_w = video.get(cv2.CAP_PROP_FRAME_WIDTH)
-image_h = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+if args.flip == 1:
+    image_w = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    image_h = video.get(cv2.CAP_PROP_FRAME_WIDTH)
+else:
+    image_w = video.get(cv2.CAP_PROP_FRAME_WIDTH)
+    image_h = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
 half_image_w = int(image_w/2)
 half_image_h = int(image_h/2)
 target_pos = target_sz= None
@@ -442,10 +452,69 @@ image_w = video.get(cv2.CAP_PROP_FRAME_WIDTH)
 image_h = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
 n_frame = 0
-while True:
-    ok, frame = video.read()
-    if not ok:
-        break
+
+def write_json(res, file_path, image_w, image_h):
+
+    r = deepcopy(empty_record)
+    r['asset']['id'] = randomString(32)
+    r['asset']['name'] = os.path.basename(file_path)
+    r['asset']['path'] = os.path.abspath(file_path)
+    r['asset']['size']['height'] = image_h
+    r['asset']['size']['width'] = image_w
+
+    xmin, ymin, xmax, ymax, vis = res
+    if vis == 1:
+        xmin = xmin * image_w
+        ymin = ymin * image_h
+        xmax = xmax * image_w
+        ymax = ymax * image_h
+    else:
+        xmin = ymin = xmax = ymax = 0.0
+
+    w = max(0, xmax - xmin)
+    h = max(0, ymax - ymin)
+
+    b = deepcopy(empty_box)
+    b['id'] = randomString(9)
+    b['boundingBox']['height'] = h
+    b['boundingBox']['left'] = xmin
+    b['boundingBox']['top'] = ymin
+    b['boundingBox']['width'] = w
+
+    p1 = deepcopy(empty_point)
+    p2 = deepcopy(empty_point)
+    p3 = deepcopy(empty_point)
+    p4 = deepcopy(empty_point)
+
+    p1['x'] = xmin
+    p1['y'] = ymin
+    p2['x'] = xmax
+    p2['y'] = ymin
+    p3['x'] = xmax
+    p3['y'] = ymax
+    p4['x'] = xmin
+    p4['y'] = ymax
+    b['points'].extend([p1, p2, p3, p4])
+    r['regions'].append(b)
+
+    out_dir = os.path.dirname(file_path) + "_json"
+    if not os.path.isdir(out_dir):
+        print("folder doesn't exist, create one.")
+        os.makedirs(out_dir)
+    out_file_path = os.path.join(out_dir, os.path.basename(os.path.dirname(file_path)) + "_" + os.path.basename(file_path).replace("jpg", "json"))
+
+    with open(out_file_path, 'w') as out:
+        json.dump(r, out)
+
+while n_frame < n_total_frames:
+    file_path = join(image_path, "%06d.jpg" % n_frame)
+    frame = cv2.imread(file_path)
+
+    image_w = frame.shape[1]
+    image_h = frame.shape[0]
+
+    write_json(res[n_frame], file_path, image_w, image_h)
+
     if n_frame < len(res):
         xmin, ymin, xmax, ymax, vis = res[n_frame]
         if vis == 1:
@@ -454,6 +523,7 @@ while True:
             xmax = int(xmax * image_w)
             ymax = int(ymax * image_h)
             cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 3, 1)
+
     if image_w > 1080:
         frame = cv2.resize(frame, (int(image_w/2), int(image_h/2)))
 
