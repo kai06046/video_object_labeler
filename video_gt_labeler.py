@@ -70,6 +70,8 @@ target_pos = target_sz= None
 patch = patch_crop = None
 n_frame = args.n-1
 is_visible = 1
+is_labeling = False
+
 start_from_half = False
 
 if n_frame != 0:
@@ -123,7 +125,7 @@ def update_template():
     patch_crop = np.zeros((config.num_scale, patch.shape[0], patch.shape[1], patch.shape[2]), np.float32)
 
 def draw():
-    global im_show, target_pos, target_sz, res
+    global im_show, target_pos, target_sz, res, im
     im_show = im.copy()
     
     if target_pos is not None:
@@ -156,37 +158,59 @@ n_reset = 0
 
 # mouse callback (retarget the bounding box)
 def mouse_opt(event, x, y, flags, param):
-    global tmp_p_1, tmp_p_2, target_pos, target_sz, n_reset, is_visible, res
+    global tmp_p_1, tmp_p_2, target_pos, target_sz, n_reset, is_visible, res, is_labeling
     if event == cv2.EVENT_LBUTTONDOWN:
-        tmp_p_1 = (min(max(0, x), half_image_w if image_w > 1080 else image_w), min(max(0, y), half_image_h if image_w > 1080 else image_h))
+
+        if not is_labeling:
+            tmp_p_1 = (min(max(0, x), half_image_w if image_w > 1080 else image_w), min(max(0, y), half_image_h if image_w > 1080 else image_h))
+            print("mouse on click at (%d, %d)" % (x, y))
+            is_labeling = True
+        else:
         # tmp_p_1 = (x, y)
-    elif event == cv2.EVENT_LBUTTONUP:
-        tmp_p_2 = (min(max(0, x), half_image_w if image_w > 1080 else image_w), min(max(0, y), half_image_h if image_w > 1080 else image_h))
-        # tmp_p_2 = (x, y)
-        n_reset += 1
+    # elif event == cv2.EVENT_LBUTTONUP:
+            tmp_p_2 = (min(max(0, x), half_image_w if image_w > 1080 else image_w), min(max(0, y), half_image_h if image_w > 1080 else image_h))
+            # tmp_p_2 = (x, y)
+            n_reset += 1
 
-        # update target bounding box
-        x_c = (tmp_p_1[0] + tmp_p_2[0]) / 2.0
-        y_c = (tmp_p_1[1] + tmp_p_2[1]) / 2.0
-        w = float(abs(tmp_p_2[0] - tmp_p_1[0]))
-        h = float(abs(tmp_p_2[1] - tmp_p_1[1]))
-        target_pos = np.array([x_c, y_c])
-        target_sz = np.array([w, h])
-        # try:
-        # res[n_frame] = np.concatenate((cxy_wh_2_bbox(target_pos, target_sz), np.array([is_visible])))
-        # except Exception as e:
-        #     print(e)
-        #     save_results(res, result_path, image_w, image_h)
-        #     print("save file in %s" % result_path)
-        #     sys.exit()
-        res[n_frame-1] = np.concatenate((cxy_wh_2_bbox(target_pos, target_sz), np.array([is_visible])))
-        # update template
-        update_template()
+            # update target bounding box
+            x_c = (tmp_p_1[0] + tmp_p_2[0]) / 2.0
+            y_c = (tmp_p_1[1] + tmp_p_2[1]) / 2.0
+            w = float(abs(tmp_p_2[0] - tmp_p_1[0]))
+            h = float(abs(tmp_p_2[1] - tmp_p_1[1]))
+            target_pos = np.array([x_c, y_c])
+            target_sz = np.array([w, h])
+            # try:
+            # res[n_frame] = np.concatenate((cxy_wh_2_bbox(target_pos, target_sz), np.array([is_visible])))
+            # except Exception as e:
+            #     print(e)
+            #     save_results(res, result_path, image_w, image_h)
+            #     print("save file in %s" % result_path)
+            #     sys.exit()
+            if len(res) == 0:
+                print("no record found, append data")
+                res.append(np.concatenate((cxy_wh_2_bbox(target_pos, target_sz), np.array([is_visible]))))            
+            else:
+                res[n_frame-1] = np.concatenate((cxy_wh_2_bbox(target_pos, target_sz), np.array([is_visible])))
+            # update template
+            update_template()
 
-        is_visible = 1
-        draw()
-        cv2.imshow('video', im_show)
-        cv2.waitKey(1)
+            is_visible = 1
+            is_labeling = False
+    elif event == cv2.EVENT_MOUSEMOVE:
+        if is_labeling:
+            tmp_p_2 = (min(max(0, x), half_image_w if image_w > 1080 else image_w), min(max(0, y), half_image_h if image_w > 1080 else image_h))
+
+            # update target bounding box
+            x_c = (tmp_p_1[0] + tmp_p_2[0]) / 2.0
+            y_c = (tmp_p_1[1] + tmp_p_2[1]) / 2.0
+            w = float(abs(tmp_p_2[0] - tmp_p_1[0]))
+            h = float(abs(tmp_p_2[1] - tmp_p_1[1]))
+            target_pos = np.array([x_c, y_c])
+            target_sz = np.array([w, h])
+            is_visible = 1
+            draw()
+            cv2.imshow('video', im_show)
+            cv2.waitKey(1)
 
 # fps = video.get(cv2.CAP_PROP_FPS)
 # frame_msec = 1000 / fps
@@ -328,6 +352,7 @@ if args.replay_only == "0":
                     print('Target pos: ', target_pos, "  Target size: ", target_sz)
                 else:
                     # is visible = 0, pass
+                    print("sss")
                     pass
                 draw()
                 cv2.imshow('video', im_show)
